@@ -1,0 +1,7 @@
+### Send POST request with json body
+POST http://po-php-api.local/counties/local
+Content-Type: application/json
+
+{
+  "needle": "heves"
+}

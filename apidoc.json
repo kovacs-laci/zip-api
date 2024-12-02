@@ -1,0 +1,7 @@
+{
+  "name": "Postoffice API",
+  "version": "1.0.0",
+  "description": "Postoffice API basic documentation",
+  "title": "Postoffice API",
+  "url" : "http://localhost:8080/api"
+}
