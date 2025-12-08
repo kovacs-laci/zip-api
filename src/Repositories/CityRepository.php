@@ -17,7 +17,9 @@ class CityRepository extends BaseRepository
 
     function getAbc($idCounty)
     {
-        $sql = "SELECT DISTINCT SUBSTRING(name, 1, 1) FROM {$this->tableName} WHERE id_county = ?";
+        $sql = <<<SQL
+            SELECT DISTINCT LEFT(name, 1) FROM {$this->tableName} WHERE id_county = ?
+        SQL;
 
         return $this->mysqli->query($sql, [$idCounty])->fetch_all(MYSQLI_ASSOC);
     }
@@ -37,7 +39,8 @@ class CityRepository extends BaseRepository
         $stmt->bind_param('i', $countyId);
 
         if (!$stmt->execute()) {
-            Response::response([], 404);
+            Response::error('Not found', 404);
+            exit;
         }
 
         return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);

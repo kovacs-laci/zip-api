@@ -3,16 +3,26 @@
 namespace App\Repositories;
 
 use App\Database\DB;
-//use App\Interfaces\DBInterface;
-class BaseRepository extends DB // implements DBInterface
-{
+use App\Interfaces\RepositoryInterface;
+use Exception;
 
+abstract class BaseRepository extends DB implements RepositoryInterface
+{
     public string $tableName;
 
-    /**
-     * @param array $data
-     * @return void
-     */
+    public function __construct(
+        $host = self::HOST,
+        $user = self::USER,
+        $password = self::PASSWORD,
+        $database = self::DATABASE
+    ) {
+        parent::__construct($host, $user, $password, $database);
+
+        if (empty($this->tableName)) {
+            throw new Exception("Repository error: tableName must be defined in child class.");
+        }
+    }
+
     public function create(array $data): ?int
     {
         $sql = "INSERT INTO `%s` (%s) VALUES (%s)";
@@ -30,6 +40,7 @@ class BaseRepository extends DB // implements DBInterface
                 $values .= "'$value'";
         }
         $sql = sprintf($sql, $this->tableName, $fields, $values);
+
         $this->mysqli->query($sql);
 
         $lastInserted = $this->mysqli->query("SELECT LAST_INSERT_ID() id;")->fetch_assoc();
@@ -94,12 +105,12 @@ class BaseRepository extends DB // implements DBInterface
         return $this->mysqli->query($query)->fetch_all(MYSQLI_ASSOC);
     }
 
-//    public function truncate()
-//    {
-//        $query = "TRUNCATE TABLE makers;";
-//
-//        return $this->mysqli->query($query);
-//    }
+    public function truncate()
+    {
+        $query = "TRUNCATE TABLE `{$this->tableName}`;";
+
+        return $this->mysqli->query($query);
+    }
 
     public function getCount()
     {

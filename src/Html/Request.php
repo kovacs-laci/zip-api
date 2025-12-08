@@ -5,20 +5,40 @@ namespace App\Html;
 use App\Repositories\BaseRepository;
 use App\Repositories\CountyRepository;
 use App\Repositories\CityRepository;
+use App\Repositories\UserRepository;
 
 class Request
 {
     static array $acceptedRoutes = [
-        'POST' => ['/counties', '/cities', '/counties/{county_id}/cities'],
-        'GET' => [
+        'POST' => [
+            '/users/login',
+            '/users/logout',
+            '/users',
             '/counties',
             '/cities',
-            '/counties/{county_id}',
-            '/counties/{county_id}/cities',
-            '/cities/{city_id}',
+            '/counties/{county}/cities'
         ],
-        'DELETE' => ['/counties/{id}', '/cities/{id}'],
-        'PUT' => ['/counties/{id}', '/cities/{id}'],
+        'GET' => [
+            '/users',
+            '/users/{id}',
+            '/counties',
+            '/counties/{id}',
+            '/cities',
+            '/cities/{id}',
+            '/counties/{county}/cities'
+        ],
+        'PUT' => [
+            '/users/{id}',
+            '/counties/{id}',
+            '/cities/{id}',
+            '/counties/{county}/cities/{id}'
+        ],
+        'DELETE' => [
+            '/users/{id}',
+            '/counties/{id}',
+            '/cities/{id}',
+            '/counties/{county}/cities/{id}'
+        ],
     ];
 
     static function handle()
@@ -29,7 +49,8 @@ class Request
 
         // Check if the request is valid
         if (!self::isRouteAllowed($requestMethod, $requestUri, self::$acceptedRoutes)) {
-            return Response::response([], 400);
+            Response::error('Bad request');
+            exit;
         }
 
         $requestUri = $_SERVER['REQUEST_URI'];
@@ -86,19 +107,101 @@ class Request
      */
     private static function postRequest($resourceName, $requestData)
     {
+        // Speciális login kezelés
+        if ($resourceName === 'users' && self::isLoginRequest()) {
+            self::handleLogin($requestData);
+            return;
+        }
+        // LOGOUT speciális kezelés
+        if ($resourceName === 'users' && self::isLogoutRequest()) {
+            self::handleLogout();
+            return;
+        }
+
+        // Általános CRUD POST
         $repository = self::getRepository($resourceName);
         if (!$repository) {
-            return Response::response([], 400);
+            Response::error("Couldn't get repository", 400);
+            return;
         }
 
         $newId = $repository->create($requestData);
         if ($newId) {
-            $code = 201; // Created
+            Response::created(['id' => $newId]); // 201 Created
+            return;
         }
 
-        Response::response(['id' => $newId], $code);
+        Response::error("Bad request", 400);
     }
 
+    // Segédfüggvény: login felismerése
+    private static function isLoginRequest(): bool
+    {
+        return isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/users/login') !== false;
+    }
+
+    // Segédfüggvény: login logika
+    private static function handleLogin(array $requestData): void
+    {
+        /**
+         * @var UserRepository $repository
+         */
+        $repository = self::getRepository('users');
+        if (!$repository instanceof UserRepository) {
+            Response::error("Couldn't get UserRepository", 400);
+            return;
+        }
+
+        $user = $repository->findByEmail($requestData['email'] ?? '');
+        if (!$user || !password_verify($requestData['password'] ?? '', $user['password'])) {
+            Response::error("Invalid credentials", 401); // Unauthorized
+            return;
+        }
+
+        $token = $repository->createToken($user['id']);
+        Response::ok([
+            'token' => $token,
+            'user'  => [
+                'id'    => $user['id'],
+                'name'  => $user['name'],
+                'email' => $user['email']
+            ]
+        ], 200);
+    }
+
+    // Segédfüggvény: logout felismerése
+    private static function isLogoutRequest(): bool
+    {
+        return isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/users/logout') !== false;
+    }
+
+    // Segédfüggvény: logout logika
+    private static function handleLogout(): void
+    {
+        $repository = self::getRepository('users');
+        if (!$repository) {
+            Response::error("Couldn't get repository", 400);
+            return;
+        }
+
+        // Token kinyerése az Authorization headerből
+        $headers = getallheaders();
+        $authHeader = $headers['Authorization'] ?? '';
+        if (strpos($authHeader, 'Bearer ') !== 0) {
+            Response::error("Missing or invalid Authorization header", 401);
+            return;
+        }
+
+        $token = substr($authHeader, 7); // "Bearer " levágása
+
+        // Token érvénytelenítése
+        $result = $repository->invalidateToken($token);
+        if ($result) {
+            Response::ok(['message' => 'Logged out'], 204);
+        } else {
+            Response::error("Invalid token", 401);
+        }
+    }
     /**
      * @api {delete} /counties/:id Delete county with {id}
      * @apiName index
@@ -122,11 +225,8 @@ class Request
     private static function deleteRequest($resourceName, $resourceId)
     {
         $repository = self::getRepository($resourceName);
-        $result = $repository->delete($resourceId);
-        if ($result) {
-            $code = 204;
-        }
-        Response::response([], $code);
+        $repository->delete($resourceId);
+        Response::deleted();
     }
     /**
      * @api {get} /counties Get list of counties
@@ -162,40 +262,46 @@ class Request
         if ($childResourceName) {
             $repository = self::getRepository($childResourceName);
             if ($resourceId) {
-                $entities = $repository->getCitiesByCounty($resourceId);
-                Response::response($entities, 200);
-                return;
+				// Példa: /counties/{id}/cities
+				if ($childResourceName === 'cities') {
+					$entities = $repository->getCitiesByCounty($resourceId);
+					Response::ok(['entities' => $entities]);
+					exit;
+				}
             }
         }
         $repository = self::getRepository($resourceName);
         if ($resourceId) {
             $entity = $repository->find($resourceId);
             if (!$entity) {
-                Response::response([], 404);
-                return;
+                Response::error('Not found', 404);
+                exit;
             }
-            Response::response($entity, 200);
-            return;
+            Response::ok(['entity' => $entity]);
+            exit;
         }
         $entities = $repository->getAll();
-        Response::response($entities, 200);
+        Response::ok(['entities' => $entities]);
     }
 
     private static function putRequest($resourceName, $resourceId, $requestData)
     {
         $repository = self::getRepository($resourceName);
-        $code = 404;
         $entity = $repository->find($resourceId);
-        if ($entity) {
-            foreach ($requestData as $key => $value) {
-                $data[$key] = $value;
-            }
-            $result = $repository->update($resourceId, $data);
-            if ($result) {
-                $code = 202;
-            }
+        if (!$entity) {
+            Response::error('Not found', 404);
+            exit;
         }
-        Response::response([], $code);
+
+        $data = [];
+        foreach ($requestData as $key => $value) {
+            $data[$key] = $value;
+        }
+        $result = $repository->update($resourceId, $data);
+        if ($result) {
+            Response::updated();
+            exit;
+        }
     }
 
     private static function getRequestData(): ?array
@@ -217,7 +323,6 @@ class Request
     }
     private static function getResourceId(array $request): ?int
     {
-//        return $request['childResourceId'] ?? $request['resourceId'];
         return $request['resourceId'];
     }
 
@@ -228,7 +333,6 @@ class Request
 
     private static function getChildResourceId(array $request): ?int
     {
-//        return $request['childResourceId'] ?? $request['resourceId'];
         return $request['childResourceId'];
     }
 
@@ -288,10 +392,13 @@ class Request
         switch ($resourceName) {
             case 'counties':
                 $repository = new CountyRepository();
-            break;
+                break;
             case 'cities':
                 $repository = new CityRepository();
-            break;
+                break;
+            case 'users':
+                $repository = new UserRepository();
+                break;
             default:
                 $repository = null;
         }
