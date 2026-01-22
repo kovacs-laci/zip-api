@@ -125,4 +125,5 @@ abstract class BaseRepository extends DB implements RepositoryInterface
     {
         return "SELECT * FROM `{$this->tableName}` ";
     }
+
 }

@@ -54,8 +54,10 @@ class Request
         }
 
         $requestUri = $_SERVER['REQUEST_URI'];
+        // Csak az útvonal rész (query string nélkül)
+        $path = parse_url($requestUri, PHP_URL_PATH);
         $requestData = self::getRequestData();
-        $arrUri = self::requestUriToArray($requestUri);
+        $arrUri = self::requestUriToArray($path);
         $resourceName = self::getResourceName($arrUri);
         $resourceId = self::getResourceId($arrUri);
         $childResourceName = self::getChildResourceName($arrUri);
@@ -80,31 +82,84 @@ class Request
     }
 
     /**
-     * @api {post} /counties Add a new county
-     * @apiName create
-     * @apiGroup Counties
+     * @api {post} /:resource Create new entity
+     * @apiName CreateEntity
+     * @apiGroup Generic
      * @apiVersion 1.0.0
      *
-     * @apiBody {String} name Mandatory name of county
-     *
      * @apiParamExample {json} Request-Example:
-     *       {
-     *         "name": "Bereg"
-     *       }
+     *     {
+     *         "name": "Borsod-Abaúj-Zemplén"
+     *     }
      *
-     * @apiSuccess {Object[]} counties       List of counties.
-     * @apiSuccess {Number}   counties.id    County id.
+     * @apiSuccess (201 Created) {Number} id Newly created entity ID.
      *
      * @apiSuccessExample {json} Success-Response:
-     *      HTTP/1.1 201 Created
-     *      {
-     *          "data":[
-     *              {"id":57}
-     *          ],
-     *          "message":"Created",
-     *          "status":201
-     *      }
+     *     HTTP/1.1 201 Created
+     *     {
+     *         "data": {
+     *             "id": 42
+     *         },
+     *         "message": "Created",
+     *         "status": 201
+     *     }
+     *
+     * @apiError (400 Bad Request) BadRequest Couldn't create entity.
+     *
+     * @apiErrorExample {json} Error-Response:
+     *     HTTP/1.1 400 Bad Request
+     *     {
+     *         "data": [],
+     *         "message": "Bad request",
+     *         "status": 400
+     *     }
      */
+
+    /**
+     * @api {post} /users/login User login
+     * @apiName UserLogin
+     * @apiGroup Users
+     * @apiVersion 1.0.0
+     *
+     * @apiParam {String} email User email.
+     * @apiParam {String} password User password.
+     *
+     * @apiParamExample {json} Request-Example:
+     *     {
+     *         "email": "test@example.com",
+     *         "password": "secret"
+     *     }
+     *
+     * @apiSuccess {String} token Authentication token.
+     *
+     * @apiSuccessExample {json} Success-Response:
+     *     HTTP/1.1 200 OK
+     *     {
+     *         "data": {
+     *             "token": "abc123..."
+     *         },
+     *         "message": "OK",
+     *         "status": 200
+     *     }
+     *
+     * @apiError (401 Unauthorized) InvalidCredentials Wrong email or password.
+     */
+
+    /**
+     * @api {post} /users/logout User logout
+     * @apiName UserLogout
+     * @apiGroup Users
+     * @apiVersion 1.0.0
+     *
+     * @apiSuccessExample {json} Success-Response:
+     *     HTTP/1.1 200 OK
+     *     {
+     *         "data": [],
+     *         "message": "Logged out",
+     *         "status": 200
+     *     }
+     */
+
     private static function postRequest($resourceName, $requestData)
     {
         // Speciális login kezelés
@@ -127,7 +182,8 @@ class Request
 
         $newId = $repository->create($requestData);
         if ($newId) {
-            Response::created(['id' => $newId]); // 201 Created
+            $entity = $repository->find($newId);
+            Response::created(['id' => $newId, 'entity' => $entity]);
             return;
         }
 
@@ -259,18 +315,22 @@ class Request
      */
     private static function getRequest($resourceName, $resourceId = null, $childResourceName = null)
     {
+        // Child resource (pl. /counties/5/cities)
         if ($childResourceName) {
             $repository = self::getRepository($childResourceName);
             if ($resourceId) {
-				// Példa: /counties/{id}/cities
-				if ($childResourceName === 'cities') {
-					$entities = $repository->getCitiesByCounty($resourceId);
-					Response::ok(['entities' => $entities]);
-					exit;
-				}
+                if ($childResourceName === 'cities') {
+                    $entities = $repository->getCitiesByCounty($resourceId);
+                    Response::ok(['entities' => $entities]);
+                    exit;
+                }
             }
         }
+
+        // Normál resource
         $repository = self::getRepository($resourceName);
+
+        // ID szerinti lekérés
         if ($resourceId) {
             $entity = $repository->find($resourceId);
             if (!$entity) {
@@ -280,9 +340,22 @@ class Request
             Response::ok(['entity' => $entity]);
             exit;
         }
+
+        // 🔍 Keresés támogatása
+        $needle = $_GET['needle'] ?? null;
+
+        if ($needle) {
+            // A repository-nak kell egy search() metódus
+            $entities = $repository->findByName($needle);
+            Response::ok(['entities' => $entities]);
+            exit;
+        }
+
+        // Teljes lista
         $entities = $repository->getAll();
         Response::ok(['entities' => $entities]);
     }
+
 
     private static function putRequest($resourceName, $resourceId, $requestData)
     {

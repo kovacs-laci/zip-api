@@ -11,8 +11,8 @@ class CityRepository extends BaseRepository
         $password = self::PASSWORD,
         $database = self::DATABASE)
     {
-        parent::__construct($host, $user, $password, $database);
         $this->tableName = 'cities';
+        parent::__construct($host, $user, $password, $database);
     }
 
     function getAbc($idCounty)
