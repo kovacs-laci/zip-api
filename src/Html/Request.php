@@ -25,7 +25,9 @@ class Request
             '/counties/{id}',
             '/cities',
             '/cities/{id}',
-            '/counties/{county}/cities'
+            '/counties/{county}/cities',
+            '/counties/{county}/abc',
+            '/counties/{county}/abc/{initial}',
         ],
         'PUT' => [
             '/users/{id}',
@@ -61,7 +63,7 @@ class Request
         $resourceName = self::getResourceName($arrUri);
         $resourceId = self::getResourceId($arrUri);
         $childResourceName = self::getChildResourceName($arrUri);
-//        $childResourceId = self::getChildResourceId($arrUri);
+        $childResourceId = self::getChildResourceId($arrUri);
         switch ($requestMethod){
             case "POST":
                 self::postRequest($resourceName, $requestData);
@@ -70,7 +72,7 @@ class Request
                 self::putRequest($resourceName, $resourceId, $requestData);
                 break;
             case "GET":
-                self::getRequest($resourceName, $resourceId, $childResourceName);
+                self::getRequest($resourceName, $resourceId, $childResourceName, $childResourceId);
                 break;
             case "DELETE":
                 self::deleteRequest($resourceName, $resourceId);
@@ -313,15 +315,40 @@ class Request
      *           "status":404
      *      }
      */
-    private static function getRequest($resourceName, $resourceId = null, $childResourceName = null)
+    private static function getRequest($resourceName, $resourceId = null, $childResourceName = null, $childResourceId = null)
     {
         // Child resource (pl. /counties/5/cities)
         if ($childResourceName) {
             $repository = self::getRepository($childResourceName);
+
             if ($resourceId) {
+
                 if ($childResourceName === 'cities') {
+                    /** @var CityRepository $repository */
+
+                    // 🔍 KERESÉS TÁMOGATÁSA
+                    $needle = $_GET['needle'] ?? null;
+                    if ($needle) {
+                        $entities = $repository->searchByName($resourceId, $needle);
+                        Response::ok(['entities' => $entities]);
+                        exit;
+                    }
+
+                    // Ha nincs keresés → normál lista
                     $entities = $repository->getCitiesByCounty($resourceId);
                     Response::ok(['entities' => $entities]);
+                    exit;
+                }
+
+                if ($childResourceName === 'abc') {
+                    /** @var CityRepository $repository */
+                    if ($childResourceId) {
+                        $entities = $repository->getCitiesByInitial($resourceId, $childResourceId);
+                        Response::ok(['entities' => $entities]);
+                        exit;
+                    }
+                    $initials = $repository->getCitiesInitialsByCounty($resourceId);
+                    Response::ok(['initials' => $initials]);
                     exit;
                 }
             }
@@ -341,15 +368,15 @@ class Request
             exit;
         }
 
-        // 🔍 Keresés támogatása
-        $needle = $_GET['needle'] ?? null;
-
-        if ($needle) {
-            // A repository-nak kell egy search() metódus
-            $entities = $repository->findByName($needle);
-            Response::ok(['entities' => $entities]);
-            exit;
-        }
+//        // 🔍 Keresés támogatása
+//        $needle = $_GET['needle'] ?? null;
+//
+//        if ($needle) {
+//            /** @var CityRepository $repository */
+//            $entities = $repository->searchByName($resourceId, $needle);
+//            Response::ok(['entities' => $entities]);
+//            exit;
+//        }
 
         // Teljes lista
         $entities = $repository->getAll();
@@ -389,7 +416,7 @@ class Request
             'resourceName' => $arrUri[1] ?? null,
             'resourceId' => !empty($arrUri[2]) ? (int)$arrUri[2] :  null,
             'childResourceName' => $arrUri[3] ?? null,
-            'childResourceId' => !empty($arrUri[4]) ? (int)$arrUri[4] : null,
+            'childResourceId' => !empty($arrUri[4]) ? $arrUri[4] : null,
         ];
 
         return $result;
@@ -404,7 +431,7 @@ class Request
         return $request['resourceName'];
     }
 
-    private static function getChildResourceId(array $request): ?int
+    private static function getChildResourceId(array $request): int|string|null
     {
         return $request['childResourceId'];
     }
@@ -467,6 +494,7 @@ class Request
                 $repository = new CountyRepository();
                 break;
             case 'cities':
+            case 'abc':
                 $repository = new CityRepository();
                 break;
             case 'users':

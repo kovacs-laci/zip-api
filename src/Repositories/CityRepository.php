@@ -34,7 +34,7 @@ class CityRepository extends BaseRepository
 
     function getCitiesByCounty($countyId)
     {
-        $sql = "SELECT * FROM {$this->tableName} WHERE id_county = ? ORDER BY city";
+        $sql = $this->select() . " WHERE id_county = ? ORDER BY city";
         $stmt = $this->mysqli->prepare($sql);
         $stmt->bind_param('i', $countyId);
 
@@ -45,4 +45,49 @@ class CityRepository extends BaseRepository
 
         return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     }
+
+    function getCitiesInitialsByCounty($countyId)
+    {
+        $sql = "SELECT DISTINCT LEFT(city, 1) initial FROM {$this->tableName} WHERE id_county = ? ORDER BY city";
+        $stmt = $this->mysqli->prepare($sql);
+        $stmt->bind_param('i', $countyId);
+
+        if (!$stmt->execute()) {
+            Response::error('Not found', 404);
+            exit;
+        }
+
+        return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    }
+
+    function getCitiesByInitial($countyId, $initial)
+    {
+        $sql = $this->select() . " WHERE id_county = ? AND LEFT(city, 1) = ?  ORDER BY city";
+        $stmt = $this->mysqli->prepare($sql);
+        $stmt->bind_param('is', $countyId,$initial);
+
+        if (!$stmt->execute()) {
+            Response::error('Not found', 404);
+            exit;
+        }
+
+        return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    }
+
+    public function searchByName($countyId, $needle)
+    {
+        $sql = $this->select() . "WHERE id_county = ?
+              AND city LIKE CONCAT('%', ?, '%')
+            ORDER BY city";
+        $stmt = $this->mysqli->prepare($sql);
+        $stmt->bind_param("is", $countyId, $needle);
+
+        if (!$stmt->execute()) {
+            Response::error('Not found', 404);
+            exit;
+        }
+
+        return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    }
+
 }
