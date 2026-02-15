@@ -57,6 +57,12 @@ abstract class BaseRepository extends DB implements RepositoryInterface
             $result = [];
         }
 
+        foreach ($result as $key => $value) {
+            if (is_numeric($value)) {
+                $result[$key] = (int)$value;
+            }
+        }
+
         return $result;
     }
 

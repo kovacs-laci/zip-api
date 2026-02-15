@@ -1,0 +1,15 @@
+meta {
+  name: Get cities by county
+  type: http
+  seq: 7
+}
+
+get {
+  url: http://127.0.0.1/counties/45/cities
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+}

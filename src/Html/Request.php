@@ -45,6 +45,16 @@ class Request
 
     static function handle()
     {
+        // CORS headers
+        header("Access-Control-Allow-Origin: *");
+        header("Access-Control-Allow-Headers: *");
+        header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+        // Preflight (OPTIONS) request kezelése
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            http_response_code(200);
+            exit();
+        }
+
         // Get current request method and URI
         $requestMethod = $_SERVER['REQUEST_METHOD'];
         $requestUri = trim(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH), '/');
@@ -66,6 +76,7 @@ class Request
         $childResourceId = self::getChildResourceId($arrUri);
         switch ($requestMethod){
             case "POST":
+                $resourceName = $childResourceName ?: $resourceName;
                 self::postRequest($resourceName, $requestData);
                 break;
             case "PUT":
@@ -185,7 +196,7 @@ class Request
         $newId = $repository->create($requestData);
         if ($newId) {
             $entity = $repository->find($newId);
-            Response::created(['id' => $newId, 'entity' => $entity]);
+            Response::created(['id' => (int)$newId, 'entity' => $entity]);
             return;
         }
 
@@ -399,8 +410,7 @@ class Request
         }
         $result = $repository->update($resourceId, $data);
         if ($result) {
-            Response::updated();
-            exit;
+            Response::updated(['id' => (int)$resourceId, 'entity' => $result]);
         }
     }
 

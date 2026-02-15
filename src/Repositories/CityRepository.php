@@ -62,7 +62,9 @@ class CityRepository extends BaseRepository
 
     function getCitiesByInitial($countyId, $initial)
     {
-        $sql = $this->select() . " WHERE id_county = ? AND LEFT(city, 1) = ?  ORDER BY city";
+        $initial = urldecode($initial);
+
+        $sql = $this->select() . " WHERE id_county = ? AND LEFT(city, 1) = ? ORDER BY city";
         $stmt = $this->mysqli->prepare($sql);
         $stmt->bind_param('is', $countyId,$initial);
 
